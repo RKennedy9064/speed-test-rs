@@ -8,21 +8,26 @@ use std::{convert::TryFrom, error::Error, fmt, time::Instant};
 
 pub type SpeedTestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
+pub trait SpeedTestEvents {
+    fn on_download(&mut self, target_download_information: &TargetDownloadInformation);
+    fn on_downloading(&mut self, target_download_information: &TargetDownloadInformation);
+    fn on_downloaded(&mut self, target_download_information: &TargetDownloadInformation);
+}
+
 #[derive(Default)]
 pub struct SpeedTest {
     token: String,
     url_count: Option<u64>,
     client: Option<Client>,
     targets: Option<Vec<Target>>,
-    on_download: Option<fn(&TargetDownloadInformation) -> TargetDownloadInformation>,
-    on_downloading: Option<fn(&TargetDownloadInformation)>,
+    hooks: Vec<Box<dyn SpeedTestEvents>>,
 }
 
 impl fmt::Debug for SpeedTest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "SpeedTest {{ token: {}, url_count: {:?}, client: {:?}, targets: {:?} }}",
+            "{{ token: {}, url_count: {:?}, client: {:?}, targets: {:?} }}",
             self.token, self.url_count, self.client, self.targets
         )
     }
@@ -51,9 +56,9 @@ struct Target {
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct TargetDownloadInformation {
-    bytes_downloaded: u64,
-    total_bytes: u64,
-    time_elapsed: u128,
+    pub bytes_downloaded: u64,
+    pub total_bytes: u64,
+    pub time_elapsed: u128,
 }
 
 impl SpeedTest {
@@ -64,17 +69,12 @@ impl SpeedTest {
         }
     }
 
-    pub fn set_on_download(&mut self, on_download: fn(&TargetDownloadInformation) -> TargetDownloadInformation) {
-        println!("{:?}", on_download as usize);
-        self.on_download = Some(on_download);
-    }
-
-    pub fn set_on_downloading(&mut self, on_downloading: fn(&TargetDownloadInformation)) {
-        self.on_downloading = Some(on_downloading);
-    }
-
     fn get_reqwest_client(&self) -> SpeedTestResult<ReqwestClient> {
         ReqwestClient::builder().build().map_err(Into::into)
+    }
+
+    pub fn add_events_hook<S: SpeedTestEvents + 'static>(&mut self, hook: S) {
+        self.hooks.push(Box::new(hook))
     }
 
     pub async fn measure_download_speed(&mut self) -> SpeedTestResult<TargetDownloadInformation> {
@@ -94,8 +94,8 @@ impl SpeedTest {
                 target_download_information.total_bytes += content_length;
             }
 
-            if let Some(on_download) = self.on_download {
-                on_download(&target_download_information);
+            for hook in &mut self.hooks {
+                hook.on_download(&target_download_information);
             }
 
             let now = Instant::now();
@@ -106,13 +106,17 @@ impl SpeedTest {
                 while let Some(item) = stream.next().await {
                     target_download_information.bytes_downloaded += u64::try_from(item?.len())?;
 
-                    if let Some(on_downloading) = self.on_downloading {
-                        on_downloading(&target_download_information);
+                    for hook in &mut self.hooks {
+                        hook.on_downloading(&target_download_information);
                     }
                 }
             }
 
             target_download_information.time_elapsed = now.elapsed().as_nanos();
+        }
+
+        for hook in &mut self.hooks {
+            hook.on_downloaded(&target_download_information);
         }
 
         Ok(target_download_information)
@@ -150,12 +154,6 @@ mod tests {
 
     const TOKEN: &str = "YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm";
 
-    fn on_download(target_download_information: &TargetDownloadInformation) -> TargetDownloadInformation {
-        *target_download_information
-    }
-
-    fn on_downloading(_target_download_information: &TargetDownloadInformation) {}
-
     #[test]
     fn speed_test_new_works() {
         let speed_test = SpeedTest::new(TOKEN);
@@ -164,22 +162,6 @@ mod tests {
         assert_eq!(speed_test.client, None);
         assert_eq!(speed_test.targets, None);
         assert_eq!(speed_test.url_count, None);
-    }
-
-    #[test]
-    fn speed_test_set_on_download_works() {
-        let mut speed_test = SpeedTest::new(TOKEN);
-        speed_test.set_on_download(on_download);
-
-        assert_eq!(speed_test.on_download.is_some(), true);
-    }
-
-    #[test]
-    fn speed_test_set_on_downloading_works() {
-        let mut speed_test = SpeedTest::new(TOKEN);
-        speed_test.set_on_downloading(on_downloading);
-
-        assert_eq!(speed_test.on_downloading.is_some(), true);
     }
 
     #[tokio::test]
@@ -196,9 +178,6 @@ mod tests {
     #[tokio::test]
     async fn speed_test_measure_download_speed_works() -> SpeedTestResult<()> {
         let mut speed_test = SpeedTest::new(TOKEN);
-        speed_test.set_on_download(on_download);
-        speed_test.set_on_downloading(on_downloading);
-
         let _target_download_information = speed_test.measure_download_speed().await?;
 
         Ok(())
