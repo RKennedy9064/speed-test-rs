@@ -7,7 +7,6 @@ on:
       - master
 
 env:
-  REQWEST_TEST_BODY_FULL: 1
   RUST_BACKTRACE: 1
 
 jobs:
@@ -71,12 +70,6 @@ jobs:
           command: build
           args: ${{ matrix.features }}
 
-      - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1
-
   # Separate build job for nightly because of the missing feature for allowed failures at
   # job level. See `jobs.build.strategy.matrix`.
   nightly:
@@ -100,11 +93,6 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-
-      - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
 
   minversion:
     name: Minimum version ${{ matrix.rust }}
