@@ -2,9 +2,10 @@
 #![warn(missing_debug_implementations, missing_copy_implementations)]
 
 use futures_util::StreamExt;
+use parking_lot::RwLock;
 use reqwest::Client as ReqwestClient;
 use serde::Deserialize;
-use std::{convert::TryFrom, error::Error, fmt, time::Instant};
+use std::{convert::TryFrom, error::Error, fmt, sync::{Arc}, time::Instant};
 
 pub type SpeedTestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -14,13 +15,12 @@ pub trait SpeedTestEvents {
     fn on_downloaded(&mut self, target_download_information: &TargetDownloadInformation);
 }
 
-#[derive(Default)]
 pub struct SpeedTest {
     token: String,
     url_count: Option<u64>,
     client: Option<Client>,
     targets: Option<Vec<Target>>,
-    hooks: Vec<Box<dyn SpeedTestEvents>>,
+    hooks: Vec<Arc<RwLock<dyn SpeedTestEvents>>>,
 }
 
 impl fmt::Debug for SpeedTest {
@@ -65,7 +65,10 @@ impl SpeedTest {
     pub fn new(token: &str) -> SpeedTest {
         SpeedTest {
             token: token.to_string(),
-            ..Default::default()
+            url_count: None,
+            client: None,
+            targets: None,
+            hooks: Vec::new()
         }
     }
 
@@ -73,8 +76,10 @@ impl SpeedTest {
         ReqwestClient::builder().build().map_err(Into::into)
     }
 
-    pub fn add_events_hook<S: SpeedTestEvents + 'static>(&mut self, hook: S) {
-        self.hooks.push(Box::new(hook))
+    pub fn add_events_hook<S: SpeedTestEvents + 'static>(&mut self, hook: S) -> Arc<RwLock<S>> {
+        let hook = Arc::new(RwLock::new(hook));
+        self.hooks.push(hook.clone());
+        hook
     }
 
     pub async fn measure_download_speed(&mut self) -> SpeedTestResult<TargetDownloadInformation> {
@@ -95,7 +100,7 @@ impl SpeedTest {
             }
 
             for hook in &mut self.hooks {
-                hook.on_download(&target_download_information);
+                hook.write().on_download(&target_download_information);
             }
 
             let now = Instant::now();
@@ -107,7 +112,7 @@ impl SpeedTest {
                     target_download_information.bytes_downloaded += u64::try_from(item?.len())?;
 
                     for hook in &mut self.hooks {
-                        hook.on_downloading(&target_download_information);
+                        hook.write().on_downloading(&target_download_information);
                     }
                 }
             }
@@ -116,7 +121,7 @@ impl SpeedTest {
         }
 
         for hook in &mut self.hooks {
-            hook.on_downloaded(&target_download_information);
+            hook.write().on_downloaded(&target_download_information);
         }
 
         Ok(target_download_information)
@@ -179,6 +184,43 @@ mod tests {
     async fn speed_test_measure_download_speed_works() -> SpeedTestResult<()> {
         let mut speed_test = SpeedTest::new(TOKEN);
         let _target_download_information = speed_test.measure_download_speed().await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn speed_test_add_hooks_works() -> SpeedTestResult<()> {
+        let mut speed_test = SpeedTest::new(TOKEN);
+
+        #[derive(Debug, Default)]
+        struct Events {
+            on_download: bool,
+            on_downloading: bool,
+            on_downloaded: bool,
+        };
+
+        impl SpeedTestEvents for Events {
+            fn on_download(&mut self, _target_download_information: &TargetDownloadInformation) {
+                self.on_download = true;
+            }
+
+            fn on_downloading(&mut self, _target_download_information: &TargetDownloadInformation) {
+                self.on_downloading = true;
+            }
+
+            fn on_downloaded(&mut self, _target_download_information: &TargetDownloadInformation) {
+                self.on_downloaded = true;
+            }
+        }
+
+        let events: Events = Default::default();
+
+        let events = speed_test.add_events_hook(events);
+        speed_test.measure_download_speed().await?;
+
+        assert_eq!(events.read().on_download, true);
+        assert_eq!(events.read().on_downloading, true);
+        assert_eq!(events.read().on_downloaded, true);
 
         Ok(())
     }
