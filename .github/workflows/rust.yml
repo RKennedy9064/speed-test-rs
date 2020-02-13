@@ -47,7 +47,6 @@ jobs:
         name:
           - linux / stable
           - linux / beta
-          # - linux / nightly
           - macOS / stable
           - windows / stable-x86_64-msvc
           - windows / stable-i686-msvc
@@ -56,16 +55,10 @@ jobs:
 
         include:
           - name: linux / stable
-            test-features: "--features __internal_proxy_sys_no_cache"
           - name: linux / beta
             rust: beta
-            test-features: "--features __internal_proxy_sys_no_cache"
-          # - name: linux / nightly
-          #   rust: nightly
-          #   test-features: "--features __internal_proxy_sys_no_cache"
           - name: macOS / stable
             os: macOS-latest
-            test-features: "--features __internal_proxy_sys_no_cache"
 
           - name: windows / stable-x86_64-msvc
             os: windows-latest
@@ -137,7 +130,6 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --features __internal_proxy_sys_no_cache -- --test-threads=1
 
   minversion:
     name: Minimum version ${{ matrix.rust }}
@@ -164,52 +156,3 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: check
-
-  android:
-    name: Android
-    needs: [style]
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v1
-
-      - name: Install rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: aarch64-linux-android
-          profile: minimal
-          override: true
-
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          # disable default-tls feature since cross-compiling openssl is dragons
-          args: --target aarch64-linux-android --no-default-features
-
-  wasm:
-    name: WASM
-    needs: [style]
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v1
-
-      - name: Install rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: wasm32-unknown-unknown
-          profile: minimal
-          override: true
-
-      - name: Check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --target wasm32-unknown-unknown
