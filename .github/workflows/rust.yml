@@ -53,31 +53,6 @@ jobs:
           - windows / stable-x86_64-gnu
           - windows / stable-i686-gnu
 
-        include:
-          - name: linux / stable
-          - name: linux / beta
-            rust: beta
-          - name: macOS / stable
-            os: macOS-latest
-
-          - name: windows / stable-x86_64-msvc
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-
-          - name: windows / stable-i686-msvc
-            os: windows-latest
-            target: i686-pc-windows-msvc
-            
-          - name: windows / stable-x86_64-gnu
-            os: windows-latest
-            rust: stable-x86_64-pc-windows-gnu
-            target: x86_64-pc-windows-gnu
-            
-          - name: windows / stable-i686-gnu
-            os: windows-latest
-            rust: stable-i686-pc-windows-gnu
-            target: i686-pc-windows-gnu
-
     steps:
       - name: Checkout
         uses: actions/checkout@v1
