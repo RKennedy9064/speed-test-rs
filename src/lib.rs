@@ -5,7 +5,7 @@ use futures_util::StreamExt;
 use parking_lot::RwLock;
 use reqwest::Client as ReqwestClient;
 use serde::Deserialize;
-use std::{convert::TryFrom, error::Error, fmt, sync::{Arc}, time::Instant};
+use std::{convert::TryFrom, error::Error, fmt, sync::Arc, time::Instant};
 
 pub type SpeedTestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -68,7 +68,7 @@ impl SpeedTest {
             url_count: None,
             client: None,
             targets: None,
-            hooks: Vec::new()
+            hooks: Vec::new(),
         }
     }
 
