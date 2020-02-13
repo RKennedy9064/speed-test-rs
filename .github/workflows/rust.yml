@@ -35,11 +35,3 @@ jobs:
       run: cargo build
     - name: "Run cargo test"
       run: cargo test
-
-  check_formatting:
-    name: "Check Formatting"
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-    - run: rustup component add rustfmt
-    - run: cargo fmt -- --check
