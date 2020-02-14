@@ -110,6 +110,7 @@ impl SpeedTest {
 
                 while let Some(item) = stream.next().await {
                     target_download_information.bytes_downloaded += u64::try_from(item?.len())?;
+                    target_download_information.time_elapsed = now.elapsed().as_nanos();
 
                     for hook in &mut self.hooks {
                         hook.write().on_downloading(&target_download_information);
